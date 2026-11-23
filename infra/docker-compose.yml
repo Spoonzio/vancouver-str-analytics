@@ -1,0 +1,41 @@
+# Run from the repo root:
+#   docker compose --env-file .env -f infra/docker-compose.yml up -d
+# --env-file is needed so ${...} below resolves from the root .env.
+
+name: vancouver-str
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17
+    env_file: ../.env
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP check: the temporary server that runs init scripts only listens on the socket
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase:v0.64.8.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: postgres
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: ${MB_DB_DBNAME}
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${METABASE_PORT}:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
